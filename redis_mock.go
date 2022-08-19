@@ -33,7 +33,7 @@ type RedisMock struct {
 	openedConnections int
 }
 
-func (r *RedisMock) Connection() RedisConnection {
+func (r *RedisMock) Connection() *RedisConnectionMock {
 	r.openedConnections++
 
 	return &RedisConnectionMock{
