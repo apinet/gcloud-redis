@@ -157,6 +157,16 @@ func (c *RedisConnectionMock) SetExpire(key string, ttl int) error {
 	return c.redis.set(key, value, ttl)
 }
 
+func (c *RedisConnectionMock) ExpireTime(key string) (int, bool, error) {
+	redisMockObject := c.redis.db[key]
+
+	if redisMockObject == nil {
+		return 0, false, nil
+	}
+
+	return redisMockObject.expiresAt, true, nil
+}
+
 func (c *RedisConnectionMock) GetInt(key string) (int, bool, error) {
 	value, found, err := c.redis.get(key)
 
