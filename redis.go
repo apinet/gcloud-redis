@@ -31,7 +31,6 @@ type Redis interface {
 type RedisConnection interface {
 	Exists(key string) (bool, error)
 	SetExpire(key string, ttl int) error
-	ExpireTime(key string) (int, bool, error)
 	Delete(keys ...string) error
 
 	GetString(key string) (string, bool, error)
@@ -88,10 +87,6 @@ func (c *RedisConnectionImpl) SetString(key string, value string, ttl int) error
 func (c *RedisConnectionImpl) SetExpire(key string, ttl int) error {
 	_, err := c.conn.Do("EXPIRE", key, ttl)
 	return err
-}
-
-func (c *RedisConnectionImpl) ExpireTime(key string) (int, bool, error) {
-	return getInt(c.conn.Do("EXPIRETIME", key))
 }
 
 func (c *RedisConnectionImpl) SetInt(key string, src int, ttl int) error {
