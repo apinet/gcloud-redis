@@ -113,8 +113,8 @@ func (r *RedisMock) set(key string, value interface{}, ttl int) error {
 	return nil
 }
 
-func (c *RedisConnectionMock) GetExpireTime(key string) (int, bool) {
-	redisMockObject := c.redis.db[key]
+func (r *RedisMock) GetExpireTime(key string) (int, bool) {
+	redisMockObject := r.db[key]
 
 	if redisMockObject == nil {
 		return 0, false
