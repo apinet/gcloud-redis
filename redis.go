@@ -31,7 +31,7 @@ type Redis interface {
 type RedisConnection interface {
 	Exists(key string) (bool, error)
 	SetExpire(key string, ttl int) error
-	Delete(keys ...string) error
+	Delete(keys ...string) (int, error)
 
 	GetString(key string) (string, bool, error)
 	SetString(key string, src string, ttl int) error
@@ -105,15 +105,14 @@ func (c *RedisConnectionImpl) Pipeline() Pipeline {
 	}
 }
 
-func (c *RedisConnectionImpl) Delete(keys ...string) error {
+func (c *RedisConnectionImpl) Delete(keys ...string) (int, error) {
 	iKeys := make([]interface{}, 0, len(keys))
 
 	for _, key := range keys {
 		iKeys = append(iKeys, key)
 	}
 
-	_, err := c.conn.Do("DEL", iKeys...)
-	return err
+	return redis.Int(c.conn.Do("DEL", iKeys...))
 }
 
 func (c *RedisConnectionImpl) Close() {
@@ -131,7 +130,7 @@ type Pipeline interface {
 	GetString(key string) *GetStringCmd
 	SetString(key string, value string, ttl int)
 
-	Delete(key string)
+	Delete(key string) *DeleteCmd
 	Exec() error
 }
 
@@ -202,12 +201,14 @@ func (p *PipelineImpl) SetString(key string, value string, ttl int) {
 	p.cmds = append(p.cmds, &cmd)
 }
 
-func (p *PipelineImpl) Delete(key string) {
+func (p *PipelineImpl) Delete(key string) *DeleteCmd {
 	cmd := DeleteCmd{
-		key: key,
+		key:   key,
+		found: false,
 	}
 
 	p.cmds = append(p.cmds, &cmd)
+	return &cmd
 }
 
 // Exec send and receive registered commands and set corresponding values
@@ -257,7 +258,12 @@ func (g *GetIntCmd) Found() bool {
 }
 
 type DeleteCmd struct {
-	key string
+	key   string
+	found bool
+}
+
+func (d *DeleteCmd) Found() bool {
+	return d.found
 }
 
 type SetStringCmd struct {
@@ -380,9 +386,15 @@ func receiveCmds(conn redis.Conn, cmds []interface{}) error {
 			}
 
 		case *DeleteCmd:
-			if _, err := conn.Receive(); err != nil {
+			num, err := redis.Int(conn.Receive())
+			if err != nil {
 				return err
 			}
+
+			if num > 0 {
+				cmd.found = true
+			}
+			cmd.found = false
 
 		default:
 			return errors.New("unsupported command")

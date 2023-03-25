@@ -205,16 +205,20 @@ func (c *RedisConnectionMock) Close() {
 	c.redis.openedConnections--
 }
 
-func (c *RedisConnectionMock) Delete(keys ...string) error {
+func (c *RedisConnectionMock) Delete(keys ...string) (int, error) {
+	num := 0
 	for _, key := range keys {
 		if c.redis.failsOnDel[key] {
-			return errors.New("fails on del")
+			return 0, errors.New("fails on del")
 		}
 
+		if c.redis.db[key] != nil {
+			num++
+		}
 		delete(c.redis.db, key)
 	}
 
-	return nil
+	return num, nil
 }
 
 func (c *RedisConnectionMock) Pipeline() Pipeline {
@@ -265,9 +269,11 @@ func (p *PipelineMock) SetString(key string, value string, ttl int) {
 	p.cmds = append(p.cmds, &cmd)
 }
 
-func (p *PipelineMock) Delete(key string) {
+func (p *PipelineMock) Delete(key string) *DeleteCmd {
 	cmd := DeleteCmd{key: key}
 	p.cmds = append(p.cmds, &cmd)
+
+	return &cmd
 }
 func (p *PipelineMock) Exec() error {
 	for _, cmd := range p.cmds {
@@ -317,8 +323,15 @@ func (p *PipelineMock) Exec() error {
 			}
 
 		case *DeleteCmd:
-			if err := p.conn.Delete(cmd.key); err != nil {
+			num, err := p.conn.Delete(cmd.key)
+			if err != nil {
 				return err
+			}
+
+			if num > 0 {
+				cmd.found = true
+			} else {
+				cmd.found = false
 			}
 
 		default:
