@@ -31,6 +31,7 @@ type Redis interface {
 type RedisConnection interface {
 	Exists(key string) (bool, error)
 	SetExpire(key string, ttl int) error
+	GetExpire(key string) (int, error)
 	Delete(keys ...string) (int, error)
 
 	GetString(key string) (string, bool, error)
@@ -89,6 +90,10 @@ func (c *RedisConnectionImpl) SetExpire(key string, ttl int) error {
 	return err
 }
 
+func (c *RedisConnectionImpl) GetExpire(key string) (int, error) {
+	return getTTL(c.conn.Do("TTL", key))
+}
+
 func (c *RedisConnectionImpl) SetInt(key string, src int, ttl int) error {
 	_, err := c.conn.Do("SETEX", key, ttl, src)
 	return err
@@ -124,6 +129,7 @@ type Pipeline interface {
 	SetInt(key string, value int, ttl int)
 
 	SetExpire(key string, ttl int)
+	GetExpire(key string) *GetExpireCmd
 
 	IncrBy(key string, by int) *IncrByCmd
 
@@ -167,6 +173,15 @@ func (p *PipelineImpl) SetExpire(key string, ttl int) {
 	}
 
 	p.cmds = append(p.cmds, &cmd)
+}
+
+func (p *PipelineImpl) GetExpire(key string) *GetExpireCmd {
+	cmd := GetExpireCmd{
+		key: key,
+	}
+
+	p.cmds = append(p.cmds, &cmd)
+	return &cmd
 }
 
 func (p *PipelineImpl) IncrBy(key string, by int) *IncrByCmd {
@@ -257,6 +272,15 @@ func (g *GetIntCmd) Found() bool {
 	return g.found
 }
 
+type GetExpireCmd struct {
+	key   string
+	value int
+}
+
+func (g *GetExpireCmd) Value() int {
+	return g.value
+}
+
 type DeleteCmd struct {
 	key   string
 	found bool
@@ -301,6 +325,10 @@ func sendCmds(conn redis.Conn, cmds []interface{}) error {
 				return err
 			}
 
+		case *GetExpireCmd:
+			if err := conn.Send("TTL", cmd.key); err != nil {
+				return err
+			}
 		case *SetIntCmd:
 			if err := conn.Send("SETEX", cmd.key, cmd.ttl, cmd.value); err != nil {
 				return err
@@ -385,6 +413,11 @@ func receiveCmds(conn redis.Conn, cmds []interface{}) error {
 				return err
 			}
 
+		case *GetExpireCmd:
+			if _, err := getTTL(conn.Receive()); err != nil {
+				return err
+			}
+
 		case *DeleteCmd:
 			num, err := redis.Int(conn.Receive())
 			if err != nil {
@@ -416,6 +449,20 @@ func getInt(value interface{}, err error) (int, bool, error) {
 	}
 
 	return intVal, true, nil
+}
+
+func getTTL(value interface{}, err error) (int, error) {
+	intVal, err := redis.Int(value, err)
+
+	if err != nil {
+		return 0, err
+	}
+
+	if intVal < 0 {
+		return 0, err
+	}
+
+	return intVal, nil
 }
 
 func getString(value interface{}, err error) (string, bool, error) {

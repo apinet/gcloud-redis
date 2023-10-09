@@ -113,16 +113,6 @@ func (r *RedisMock) set(key string, value interface{}, ttl int) error {
 	return nil
 }
 
-func (r *RedisMock) GetExpireTime(key string) (int, bool) {
-	redisMockObject := r.db[key]
-
-	if redisMockObject == nil {
-		return 0, false
-	}
-
-	return redisMockObject.expiresAt, true
-}
-
 type RedisConnectionMock struct {
 	redis *RedisMock
 }
@@ -151,6 +141,15 @@ func (c *RedisConnectionMock) Exists(key string) (bool, error) {
 
 func (c *RedisConnectionMock) SetInt(key string, src int, ttl int) error {
 	return c.redis.set(key, src, ttl)
+}
+
+func (c *RedisConnectionMock) GetExpire(key string) (int, error) {
+	redisMockObject := c.redis.db[key]
+	if redisMockObject == nil || redisMockObject.expiresAt < c.redis.now {
+		return 0, nil
+	}
+
+	return redisMockObject.expiresAt - c.redis.now, nil
 }
 
 func (c *RedisConnectionMock) SetExpire(key string, ttl int) error {
@@ -239,6 +238,12 @@ func (p *PipelineMock) GetInt(key string) *GetIntCmd {
 
 	return &cmd
 }
+func (p *PipelineMock) GetExpire(key string) *GetExpireCmd {
+	cmd := GetExpireCmd{key: key}
+	p.cmds = append(p.cmds, &cmd)
+
+	return &cmd
+}
 
 func (p *PipelineMock) SetInt(key string, value int, ttl int) {
 	cmd := SetIntCmd{key: key, value: value, ttl: ttl}
@@ -287,6 +292,15 @@ func (p *PipelineMock) Exec() error {
 
 			cmd.value = value
 			cmd.found = found
+
+		case *GetExpireCmd:
+			value, err := p.conn.GetExpire(cmd.key)
+
+			if err != nil {
+				return err
+			}
+
+			cmd.value = value
 
 		case *SetIntCmd:
 			if err := p.conn.SetInt(cmd.key, cmd.value, cmd.ttl); err != nil {
