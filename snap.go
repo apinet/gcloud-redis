@@ -44,16 +44,16 @@ func RedisSnap(id string, with interface{}, ttl int, conn RedisConnection) error
 				case "set":
 					if v.Field(i).Int() != 0 {
 						pipe.SetInt(redisId, int(v.Field(i).Int()), ttl)
+					} else {
+						cmdsMap[i] = pipe.GetInt(redisId)
 					}
 
 				case "get":
 					cmdsMap[i] = pipe.GetInt(redisId)
 
 				case "inc":
-					if v.Field(i).Int() != 0 {
-						cmdsMap[i] = pipe.IncrBy(redisId, int(v.Field(i).Int()))
-						pipe.SetExpire(redisId, ttl)
-					}
+					cmdsMap[i] = pipe.IncrBy(redisId, int(v.Field(i).Int()))
+					pipe.SetExpire(redisId, ttl)
 				}
 			}
 
@@ -62,6 +62,8 @@ func RedisSnap(id string, with interface{}, ttl int, conn RedisConnection) error
 				case "set":
 					if len(v.Field(i).String()) > 0 {
 						pipe.SetString(redisId, v.Field(i).String(), ttl)
+					} else {
+						cmdsMap[i] = pipe.GetString(redisId)
 					}
 				case "get":
 					cmdsMap[i] = pipe.GetString(redisId)
