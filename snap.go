@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"strings"
 )
 
 var ErrMustBeAPointerOfStruct = errors.New("must be a pointer of struct")
@@ -33,11 +34,11 @@ func RedisSnap(id string, with interface{}, ttl int, conn RedisConnection) error
 	for i := 0; i < numField; i++ {
 		field := v.Type().Field(i)
 
-		jsonTag := field.Tag.Get("json")
+		jsonTags := strings.Split(field.Tag.Get("json"), ",")
 		redisTag := field.Tag.Get("redis")
 
-		if len(jsonTag) > 0 && len(redisTag) > 0 {
-			redisId := fmt.Sprintf("%s.%s", id, jsonTag)
+		if len(jsonTags) > 0 && len(redisTag) > 0 {
+			redisId := fmt.Sprintf("%s.%s", id, jsonTags[0])
 
 			if field.Type.Kind() == reflect.Int {
 				switch redisTag {
