@@ -44,6 +44,9 @@ type RedisConnection interface {
 
 	Pipeline() Pipeline
 
+	Subscribe(channel string) Subscribe
+	Send(channel string, data []byte) error
+
 	Close()
 }
 
@@ -122,6 +125,20 @@ func (c *RedisConnectionImpl) Delete(keys ...string) (int, error) {
 
 func (c *RedisConnectionImpl) Close() {
 	c.conn.Close()
+}
+
+func (c *RedisConnectionImpl) Subscribe(channel string) Subscribe {
+	conn := redis.PubSubConn{Conn: c.conn}
+	conn.Subscribe(channel)
+
+	return &SubscribeImpl{
+		conn,
+	}
+}
+
+func (c *RedisConnectionImpl) Send(channel string, data []byte) error {
+	_, err := c.conn.Do("PUBLISH", channel, data)
+	return err
 }
 
 type Pipeline interface {
@@ -477,4 +494,23 @@ func getString(value interface{}, err error) (string, bool, error) {
 	}
 
 	return stringVal, true, nil
+}
+
+type Subscribe interface {
+	GetData() []byte
+}
+
+type SubscribeImpl struct {
+	conn redis.PubSubConn
+}
+
+func (s *SubscribeImpl) GetData() []byte {
+	for {
+		switch v := s.conn.Receive().(type) {
+		case redis.Message:
+			return v.Data
+		case error:
+			return nil
+		}
+	}
 }

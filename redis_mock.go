@@ -13,7 +13,8 @@ func MockRedis() *RedisMock {
 		failsOnSet: make(map[string]bool),
 		failsOnDel: make(map[string]bool),
 
-		now: 0,
+		channels: make(map[string]chan []byte),
+		now:      0,
 	}
 }
 
@@ -31,6 +32,7 @@ type RedisMock struct {
 	now        int // in sec
 
 	openedConnections int
+	channels          map[string]chan []byte
 }
 
 func (r *RedisMock) Connection() RedisConnection {
@@ -227,6 +229,18 @@ func (c *RedisConnectionMock) Pipeline() Pipeline {
 	}
 }
 
+func (c *RedisConnectionMock) Subscribe(channel string) Subscribe {
+	c.redis.channels[channel] = make(chan []byte)
+	return &SubscribeMock{
+		channel: c.redis.channels[channel],
+	}
+}
+
+func (c *RedisConnectionMock) Send(channel string, data []byte) error {
+	c.redis.channels[channel] <- data
+	return nil
+}
+
 type PipelineMock struct {
 	conn *RedisConnectionMock
 	cmds []interface{}
@@ -354,4 +368,12 @@ func (p *PipelineMock) Exec() error {
 
 	}
 	return nil
+}
+
+type SubscribeMock struct {
+	channel chan []byte
+}
+
+func (s *SubscribeMock) GetData() []byte {
+	return <-s.channel
 }
